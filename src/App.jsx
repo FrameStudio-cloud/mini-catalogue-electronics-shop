@@ -27,6 +27,7 @@ function App() {
             <Hero />
             <TrustBar />
             <Catalogue />
+            <Gallery />
             <SocialFeed />
             <LocationMap />
             <Footer />

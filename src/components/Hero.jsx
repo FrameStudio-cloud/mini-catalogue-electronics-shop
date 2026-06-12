@@ -55,7 +55,7 @@ function Hero() {
               {subheadline}
             </p>
 
-            <div className="flex flex-wrap gap-3 mb-10">
+            <div className="flex flex-wrap gap-3">
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -78,19 +78,6 @@ function Hero() {
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
               </a>
-            </div>
-
-            <div className="flex flex-wrap gap-4">
-              {["ERC Certified", "Hikvision Partner", "1 Year Warranty"].map(
-                (badge) => (
-                  <div key={badge} className="flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                    <span className="text-xs text-slate-400">{badge}</span>
-                  </div>
-                ),
-              )}
             </div>
           </div>
 

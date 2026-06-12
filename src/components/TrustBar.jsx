@@ -26,7 +26,7 @@ function TrustBar() {
         .marquee-track {
           display: flex;
           width: max-content;
-          animation: marquee 30s linear infinite;
+          animation: marquee 60s linear infinite;
         }
         .marquee-track:hover {
           animation-play-state: paused;
@@ -34,7 +34,6 @@ function TrustBar() {
       `}</style>
 
       <div className="marquee-track">
-        {/* Render twice for seamless loop */}
         {[...badges, ...badges].map((badge, i) => (
           <div
             key={i}
