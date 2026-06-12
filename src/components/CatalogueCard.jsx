@@ -54,6 +54,27 @@ export function CatalogueCard({ item, onClick}) {
         >
           {item.name}
         </h3>
+        {item.variants?.colors && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {item.variants.colors.map(c => (
+              <span key={c} className="text-[10px] text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{c}</span>
+            ))}
+          </div>
+        )}
+        {item.variants?.sizes && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {item.variants.sizes.map(s => (
+              <span key={s} className="text-[10px] text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{s}</span>
+            ))}
+          </div>
+        )}
+        {item.variants?.storage && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {item.variants.storage.map(s => (
+              <span key={s} className="text-[10px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">{s}</span>
+            ))}
+          </div>
+        )}
         <p className="text-slate-400 text-xs leading-relaxed line-clamp-2 mb-3">
           {item.description}
         </p>

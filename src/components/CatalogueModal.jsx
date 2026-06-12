@@ -2,6 +2,7 @@ import shopConfig from "../config/shop";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Badge } from "./Catalogue";
+import { trackPageView } from "../hooks/usePageTracking";
 
 
 export  function CatalogueModal({ item, onClose }) {
@@ -10,6 +11,7 @@ export  function CatalogueModal({ item, onClose }) {
   useEffect(() => {
     if (!item) return;
     document.body.style.overflow = "hidden";
+    trackPageView("/product/" + encodeURIComponent(item.name), item.name);
     return () => {
       document.body.style.overflow = "";
     };

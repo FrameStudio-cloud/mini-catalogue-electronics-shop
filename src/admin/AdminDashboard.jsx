@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { getShopId, withShop } from "../lib/shop";
 
 const EMPTY_FORM = {
   type: "product",
@@ -33,9 +34,11 @@ function AdminDashboard() {
 
   async function fetchItems() {
     setLoading(true);
+    const shopId = await getShopId();
     const { data, error } = await supabase
       .from("catalogue")
       .select("*")
+      .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
     if (!error) setItems(data);
     setLoading(false);
@@ -94,9 +97,10 @@ function AdminDashboard() {
       ({ error } = await supabase
         .from("catalogue")
         .update(payload)
-        .eq("id", editItem.id));
+        .eq("id", editItem.id)
+        .eq("shop_id", await getShopId()));
     } else {
-      ({ error } = await supabase.from("catalogue").insert([payload]));
+      ({ error } = await supabase.from("catalogue").insert([withShop(payload)]));
     }
 
     setSaving(false);
@@ -112,7 +116,7 @@ function AdminDashboard() {
   async function handleDelete(id) {
     if (!confirm("Delete this item?")) return;
     setDeletingId(id);
-    const { error } = await supabase.from("catalogue").delete().eq("id", id);
+    const { error } = await supabase.from("catalogue").delete().eq("id", id).eq("shop_id", await getShopId());
     setDeletingId(null);
     if (error) {
       showToast("Delete failed", "error");
@@ -126,7 +130,8 @@ function AdminDashboard() {
     await supabase
       .from("catalogue")
       .update({ available: !item.available })
-      .eq("id", item.id);
+      .eq("id", item.id)
+      .eq("shop_id", await getShopId());
     fetchItems();
   }
 

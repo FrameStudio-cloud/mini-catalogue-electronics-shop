@@ -12,15 +12,17 @@ import { Route, Routes } from "react-router"
 import AdminLogin from "./admin/AdminLogin";
 import AdminDashboard from "./admin/AdminDashboard";
 import ProtectedRoute from "./admin/ProtectedRoute";
+import { usePageTracking } from "./hooks/usePageTracking";
 
 
 function App() {
+  usePageTracking();
   return (
     <Routes>
       <Route
         path="/"
         element={
-          <div >
+          <div className="will-change-transform">
             <Navbar />
             <Hero />
             <TrustBar />
