@@ -1,16 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import gallery from '../config/gallery'
-
-const categories = ['All', 'CCTV', 'Solar', 'Electrical']
+import { supabase } from '../lib/supabase'
+import { getShopId } from '../lib/shop'
+import fallbackGallery from '../config/gallery'
 
 function Gallery() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState('All')
   const [selectedImage, setSelectedImage] = useState(null)
 
+  useEffect(() => {
+    async function fetchGallery() {
+      const shopId = await getShopId()
+      if (!shopId) {
+        setItems(fallbackGallery)
+        setLoading(false)
+        return
+      }
+      const { data, error } = await supabase
+        .from('catalogue')
+        .select('id, name, category, image, description')
+        .eq('shop_id', shopId)
+        .not('image', 'is', null)
+        .order('created_at', { ascending: false })
+
+      if (error || !data?.length) {
+        setItems(fallbackGallery)
+      } else {
+        setItems(data.map(item => ({ ...item, title: item.name })))
+      }
+      setLoading(false)
+    }
+    fetchGallery()
+  }, [])
+
+  const categories = ['All', ...new Set(items.map(i => i.category))]
+
   const filtered = activeCategory === 'All'
-    ? gallery
-    : gallery.filter(item => item.category === activeCategory)
+    ? items
+    : items.filter(item => item.category === activeCategory)
 
   return (
     <section id="gallery" className="py-20 bg-primary">
@@ -60,47 +89,57 @@ function Gallery() {
         </div>
 
         {/* Grid */}
-        <motion.div
-          layout
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
-        >
-          <AnimatePresence>
-            {filtered.map((item) => (
-              <motion.div
-                key={item.id}
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                className="relative rounded-xl overflow-hidden group cursor-pointer aspect-square"
-                onClick={() => setSelectedImage(item)}
-              >
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-
-                {/* Overlay on hover */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                <div className="absolute bottom-0 left-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                  <span
-                    className="text-xs font-bold text-accent"
-                    style={{ fontFamily: 'var(--font-display)' }}
-                  >
-                    {item.category}
-                  </span>
-                  <p className="text-white text-xs font-semibold mt-0.5">
-                    {item.title}
-                  </p>
-                  <p className="text-slate-300 text-xs">{item.location}</p>
-                </div>
-              </motion.div>
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="aspect-square bg-surface border border-white/10 rounded-xl animate-pulse" />
             ))}
-          </AnimatePresence>
-        </motion.div>
+          </div>
+        ) : (
+          <motion.div
+            layout
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
+          >
+            <AnimatePresence>
+              {filtered.map((item) => (
+                <motion.div
+                  key={item.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  className="relative rounded-xl overflow-hidden group cursor-pointer aspect-square"
+                  onClick={() => setSelectedImage(item)}
+                >
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+
+                  {/* Overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                  <div className="absolute bottom-0 left-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                    <span
+                      className="text-xs font-bold text-accent"
+                      style={{ fontFamily: 'var(--font-display)' }}
+                    >
+                      {item.category}
+                    </span>
+                    <p className="text-white text-xs font-semibold mt-0.5">
+                      {item.title}
+                    </p>
+                    {item.location && (
+                      <p className="text-slate-300 text-xs">{item.location}</p>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
 
       </div>
 
@@ -147,7 +186,9 @@ function Gallery() {
                   >
                     {selectedImage.title}
                   </p>
-                  <p className="text-slate-300 text-sm">{selectedImage.location}</p>
+                  {selectedImage.location && (
+                    <p className="text-slate-300 text-sm">{selectedImage.location}</p>
+                  )}
                 </div>
 
                 {/* Close */}

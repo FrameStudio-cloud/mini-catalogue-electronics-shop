@@ -1,13 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import catalogue from '../config/catalogue'
+import { supabase } from '../lib/supabase'
+import { getShopId } from '../lib/shop'
+import fallbackCatalogue from '../config/catalogue'
 import { CatalogueModal } from './CatalogueModal'
 import { CatalogueCard } from './CatalogueCard'
 import SearchBar from './SearchBar'
-
-// ─── Dynamically build filter options from data ───
-const types = ['All', ...new Set(catalogue.map(i => i.type === 'product' ? 'Products' : 'Services'))]
-const allCategories = ['All', ...new Set(catalogue.map(i => i.category))]
 
 // ─── Badge component ───
 export function Badge({ text }) {
@@ -87,22 +85,69 @@ function Dropdown({ label, options, value, onChange }) {
 
 
 
+// ─── Skeleton card for loading state ───
+function SkeletonCard() {
+  return (
+    <div className="bg-surface border border-white/10 rounded-2xl overflow-hidden animate-pulse">
+      <div className="h-56 bg-white/5" />
+      <div className="p-4 space-y-3">
+        <div className="h-4 bg-white/5 rounded w-3/4" />
+        <div className="flex gap-2">
+          <div className="h-5 bg-white/5 rounded-full w-16" />
+          <div className="h-5 bg-white/5 rounded-full w-12" />
+        </div>
+        <div className="h-3 bg-white/5 rounded w-1/2" />
+        <div className="h-8 bg-white/5 rounded mt-4" />
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Catalogue Section ───
 function Catalogue() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
   const [typeFilter, setTypeFilter] = useState('All')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [selectedItem, setSelectedItem] = useState(null)
   const [searchQuery, setSearchQuery] = useState("");
 
+  useEffect(() => {
+    async function fetchCatalogue() {
+      const shopId = await getShopId()
+      if (!shopId) {
+        setItems(fallbackCatalogue)
+        setLoading(false)
+        return
+      }
+      const { data, error } = await supabase
+        .from('catalogue')
+        .select('*')
+        .eq('shop_id', shopId)
+        .eq('available', true)
+        .order('created_at', { ascending: false })
 
-  // Dynamic categories based on selected type
+      if (error || !data?.length) {
+        setItems(fallbackCatalogue)
+      } else {
+        setItems(data.map(item => ({ ...item, priceLabel: item.price_label })))
+      }
+      setLoading(false)
+    }
+    fetchCatalogue()
+  }, [])
+
+  // Dynamic filter options
+  const types = ['All', ...new Set(items.map(i => i.type === 'product' ? 'Products' : 'Services'))]
+  const allCategories = ['All', ...new Set(items.map(i => i.category))]
+
   const availableCategories = ['All', ...new Set(
-    catalogue
+    items
       .filter(i => typeFilter === 'All' || (typeFilter === 'Products' ? i.type === 'product' : i.type === 'service'))
       .map(i => i.category)
   )]
 
-  const filtered = catalogue.filter((item) => {
+  const filtered = items.filter((item) => {
     const matchesType =
       typeFilter === "All" ||
       (typeFilter === "Products"
@@ -119,7 +164,7 @@ function Catalogue() {
 
   const handleTypeChange = (val) => {
     setTypeFilter(val)
-    setCategoryFilter('All') // reset category when type changes
+    setCategoryFilter('All')
   }
 
   return (
@@ -150,80 +195,88 @@ function Catalogue() {
             installation packages
           </p>
         </motion.div>
-        <SearchBar
-          value={searchQuery}
-          onChange={setSearchQuery}
-          onClear={() => setSearchQuery("")}
-        />
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-8">
-          <Dropdown
-            label="Type"
-            options={types}
-            value={typeFilter}
-            onChange={handleTypeChange}
-          />
-          <Dropdown
-            label="Category"
-            options={availableCategories}
-            value={categoryFilter}
-            onChange={setCategoryFilter}
-          />
-
-          {/* Active filter count */}
-          {(typeFilter !== "All" || categoryFilter !== "All") && (
-            <button
-              onClick={() => {
-                setTypeFilter("All");
-                setCategoryFilter("All");
-              }}
-              className="text-xs text-slate-400 hover:text-white transition-colors underline underline-offset-2"
-            >
-              Clear filters
-            </button>
-          )}
-
-          <span className="ml-auto text-xs text-slate-500">
-            {filtered.length} {filtered.length === 1 ? "result" : "results"}
-          </span>
-        </div>
-
-        {/* Grid */}
-        <motion.div
-          layout
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <AnimatePresence>
-            {filtered.map((item) => (
-              <CatalogueCard
-                key={item.id}
-                item={item}
-                onClick={setSelectedItem}
-              />
-            ))}
-          </AnimatePresence>
-        </motion.div>
-
-        {/* Empty state */}
-        {filtered.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-4xl mb-4">🔍</p>
-            <p className="text-white font-semibold mb-2">No results found</p>
-            <p className="text-slate-400 text-sm mb-6">
-              Try a different filter combination
-            </p>
-            <button
-              onClick={() => {
-                setTypeFilter("All");
-                setCategoryFilter("All");
-              }}
-              className="px-6 py-2 bg-accent text-primary text-sm font-bold rounded-full"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Clear filters
-            </button>
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
+        ) : (
+          <>
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              onClear={() => setSearchQuery("")}
+            />
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-8">
+              <Dropdown
+                label="Type"
+                options={types}
+                value={typeFilter}
+                onChange={handleTypeChange}
+              />
+              <Dropdown
+                label="Category"
+                options={availableCategories}
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+              />
+
+              {(typeFilter !== "All" || categoryFilter !== "All") && (
+                <button
+                  onClick={() => {
+                    setTypeFilter("All");
+                    setCategoryFilter("All");
+                  }}
+                  className="text-xs text-slate-400 hover:text-white transition-colors underline underline-offset-2"
+                >
+                  Clear filters
+                </button>
+              )}
+
+              <span className="ml-auto text-xs text-slate-500">
+                {filtered.length} {filtered.length === 1 ? "result" : "results"}
+              </span>
+            </div>
+
+            {/* Grid */}
+            <motion.div
+              layout
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+            >
+              <AnimatePresence>
+                {filtered.map((item) => (
+                  <CatalogueCard
+                    key={item.id}
+                    item={item}
+                    onClick={setSelectedItem}
+                  />
+                ))}
+              </AnimatePresence>
+            </motion.div>
+
+            {/* Empty state */}
+            {filtered.length === 0 && (
+              <div className="text-center py-20">
+                <p className="text-4xl mb-4">🔍</p>
+                <p className="text-white font-semibold mb-2">No results found</p>
+                <p className="text-slate-400 text-sm mb-6">
+                  Try a different filter combination
+                </p>
+                <button
+                  onClick={() => {
+                    setTypeFilter("All");
+                    setCategoryFilter("All");
+                  }}
+                  className="px-6 py-2 bg-accent text-primary text-sm font-bold rounded-full"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
