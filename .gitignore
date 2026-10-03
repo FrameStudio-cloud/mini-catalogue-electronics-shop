@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Secrets. .env was tracked and carried a Supabase anon key, so it was removed
+# from tracking rather than only ignored - ignoring alone does not untrack a file
+# that is already in the index.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

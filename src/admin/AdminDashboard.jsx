@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { getShopId, withShop } from "../lib/shop";
+import { FiMessageCircle, FiCheck, FiPlus, FiTrash2, FiChevronUp, FiChevronDown, FiSend, FiCheckCircle } from "react-icons/fi";
 
 const EMPTY_FORM = {
   type: "product",
@@ -17,6 +18,7 @@ const EMPTY_FORM = {
 };
 
 function AdminDashboard() {
+  const [tab, setTab] = useState("catalogue");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -27,6 +29,12 @@ function AdminDashboard() {
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterType, setFilterType] = useState("All");
   const [toast, setToast] = useState(null);
+  const [chatConfig, setChatConfig] = useState(null);
+  const [chatFaqs, setChatFaqs] = useState([]);
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatMsgTab, setChatMsgTab] = useState("unanswered");
+  const [chatReplies, setChatReplies] = useState({});
+  const [chatSaving, setChatSaving] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -42,6 +50,79 @@ function AdminDashboard() {
       .order("created_at", { ascending: false });
     if (!error) setItems(data);
     setLoading(false);
+  }
+
+  async function fetchChatData() {
+    const shopId = await getShopId();
+    if (!shopId) return;
+    const [{ data: cfg }, { data: faqData }, { data: msgData }] = await Promise.all([
+      supabase.from("chat_config").select("*").eq("shop_id", shopId).maybeSingle(),
+      supabase.from("chat_faqs").select("*").eq("shop_id", shopId).order("sort_order", { ascending: true }),
+      supabase.from("chat_messages").select("*", { count: "exact" }).eq("shop_id", shopId).eq("status", "unanswered").order("created_at", { ascending: false }),
+    ]);
+    if (cfg) setChatConfig(cfg);
+    if (faqData) setChatFaqs(faqData);
+    if (msgData) setChatMsgs(msgData);
+  }
+
+  async function saveChatConfig() {
+    if (!chatConfig?.shop_id) return;
+    setChatSaving(true);
+    const { error } = await supabase.from("chat_config").upsert(chatConfig, { onConflict: "shop_id" });
+    setChatSaving(false);
+    if (error) { showToast(error.message, "error"); return; }
+    showToast("Chat settings saved!");
+  }
+
+  async function addChatFaq() {
+    const shopId = await getShopId();
+    if (!shopId) return;
+    const q = prompt("Question:");
+    if (!q?.trim()) return;
+    const a = prompt("Answer:");
+    if (!a?.trim()) return;
+    const maxOrder = chatFaqs.reduce((max, f) => Math.max(max, f.sort_order), -1);
+    const { data, error } = await supabase.from("chat_faqs").insert({ shop_id: shopId, question: q.trim(), answer: a.trim(), sort_order: maxOrder + 1 }).select().single();
+    if (error) { showToast(error.message, "error"); return; }
+    setChatFaqs([...chatFaqs, data]);
+    showToast("FAQ added!");
+  }
+
+  async function deleteChatFaq(id) {
+    const shopId = await getShopId();
+    const { error } = await supabase.from("chat_faqs").delete().eq("id", id).eq("shop_id", shopId);
+    if (error) { showToast(error.message, "error"); return; }
+    setChatFaqs(chatFaqs.filter((f) => f.id !== id));
+    showToast("FAQ deleted");
+  }
+
+  async function moveChatFaq(id, direction) {
+    const idx = chatFaqs.findIndex((f) => f.id === id);
+    if (idx === -1) return;
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= chatFaqs.length) return;
+    const updated = [...chatFaqs];
+    const temp = updated[idx].sort_order;
+    updated[idx] = { ...updated[idx], sort_order: updated[swapIdx].sort_order };
+    updated[swapIdx] = { ...updated[swapIdx], sort_order: temp };
+    setChatFaqs(updated);
+    const shopId = await getShopId();
+    const { error } = await supabase.from("chat_faqs").upsert([
+      { id: updated[idx].id, shop_id: shopId, sort_order: updated[idx].sort_order },
+      { id: updated[swapIdx].id, shop_id: shopId, sort_order: updated[swapIdx].sort_order },
+    ]);
+    if (error) { showToast(error.message, "error"); }
+  }
+
+  async function sendChatReply(id) {
+    const answer = (chatReplies[id] || "").trim();
+    if (!answer) return;
+    const shopId = await getShopId();
+    const { error } = await supabase.from("chat_messages").update({ status: "answered", answer }).eq("id", id).eq("shop_id", shopId);
+    if (error) { showToast(error.message, "error"); return; }
+    setChatReplies((prev) => { const r = { ...prev }; delete r[id]; return r; });
+    setChatMsgs(chatMsgs.filter((m) => m.id !== id));
+    showToast("Reply sent!");
   }
 
   function showToast(msg, type = "success") {
@@ -158,26 +239,49 @@ function AdminDashboard() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b bg-surface border-white/10">
-        <div>
+        <div className="flex items-center gap-4">
           <h1
             className="text-lg font-extrabold"
             style={{ fontFamily: "var(--font-display)" }}
           >
             PowerSec Admin
           </h1>
-          <p className="text-xs text-slate-400">
-            {items.length} items in catalogue
-          </p>
+          <div className="flex gap-1 bg-primary/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setTab("catalogue")}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                tab === "catalogue"
+                  ? "bg-accent text-primary"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Catalogue
+            </button>
+            <button
+              onClick={() => { setTab("chat"); fetchChatData(); }}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                tab === "chat"
+                  ? "bg-accent text-primary"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <FiMessageCircle size={12} />
+              Chat Widget
+            </button>
+          </div>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 bg-accent hover:bg-accent2 text-primary font-bold text-sm px-4 py-2.5 rounded-xl transition-all"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          + Add Item
-        </button>
+        {tab === "catalogue" && (
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 bg-accent hover:bg-accent2 text-primary font-bold text-sm px-4 py-2.5 rounded-xl transition-all"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            + Add Item
+          </button>
+        )}
       </div>
 
+      {tab === "catalogue" && (
       <div className="max-w-6xl px-4 py-8 mx-auto">
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-4">
@@ -389,7 +493,156 @@ function AdminDashboard() {
             )}
           </div>
         )}
+        </div>
+      )}
+      {tab === "chat" && (
+      <div className="max-w-lg mx-auto px-4 py-8">
+        <div className="space-y-6">
+          {/* Widget Config */}
+          <div className="p-5 border bg-surface border-white/10 rounded-xl">
+            <h3 className="text-sm font-semibold text-white mb-4" style={{ fontFamily: "var(--font-display)" }}>Widget Settings</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Enabled</label>
+                <button
+                  onClick={() => setChatConfig({ ...chatConfig, enabled: !chatConfig?.enabled })}
+                  className={`relative w-10 h-5 rounded-full transition-all ${chatConfig?.enabled ? "bg-accent" : "bg-slate-600"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${chatConfig?.enabled ? "left-5" : "left-0.5"}`} />
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Welcome Message</label>
+                <textarea rows={2} value={chatConfig?.welcome_message || ""} onChange={(e) => setChatConfig({ ...chatConfig, welcome_message: e.target.value })}
+                  className="w-full bg-primary border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent/50 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Widget Color</label>
+                  <input type="color" value={chatConfig?.widget_color || "#3B82F6"} onChange={(e) => setChatConfig({ ...chatConfig, widget_color: e.target.value })}
+                    className="w-full h-9 rounded-lg border border-white/10 cursor-pointer bg-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Position</label>
+                  <select value={chatConfig?.position || "right"} onChange={(e) => setChatConfig({ ...chatConfig, position: e.target.value })}
+                    className="w-full bg-primary border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent/50"
+                  >
+                    <option value="right">Bottom Right</option>
+                    <option value="left">Bottom Left</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">WhatsApp</label>
+                  <input type="text" value={chatConfig?.whatsapp_number || ""} onChange={(e) => setChatConfig({ ...chatConfig, whatsapp_number: e.target.value })} placeholder="2547..."
+                    className="w-full bg-primary border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent/50"
+                  />
+                </div>
+              </div>
+            </div>
+            <button onClick={saveChatConfig} disabled={chatSaving}
+              className="mt-4 w-full py-2.5 bg-accent hover:bg-accent2 text-primary font-bold text-sm rounded-xl transition-all disabled:opacity-50"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {chatSaving ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
+
+          {/* FAQs */}
+          <div className="p-5 border bg-surface border-white/10 rounded-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-display)" }}>FAQs</h3>
+              <button onClick={addChatFaq} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent2 text-primary text-xs font-bold rounded-lg transition-all">
+                <FiPlus size={12} /> Add FAQ
+              </button>
+            </div>
+            {chatFaqs.map((faq, i) => (
+              <div key={faq.id} className="bg-primary border border-white/10 rounded-lg p-3 mb-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">{faq.question}</p>
+                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{faq.answer}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => moveChatFaq(faq.id, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-white disabled:opacity-30"><FiChevronUp size={14} /></button>
+                    <button onClick={() => moveChatFaq(faq.id, 1)} disabled={i === chatFaqs.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-30"><FiChevronDown size={14} /></button>
+                    <button onClick={() => deleteChatFaq(faq.id)} className="p-1 text-red-400 hover:text-red-300"><FiTrash2 size={14} /></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {chatFaqs.length === 0 && <p className="text-xs text-slate-500 text-center py-6">No FAQs yet.</p>}
+          </div>
+
+          {/* Messages */}
+          <div className="p-5 border bg-surface border-white/10 rounded-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <FiMessageCircle size={14} className="text-slate-400" />
+              <div className="flex gap-1 bg-primary/50 rounded-lg p-0.5">
+                <button onClick={() => setChatMsgTab("unanswered")}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${chatMsgTab === "unanswered" ? "bg-accent text-primary" : "text-slate-400 hover:text-white"}`}
+                >Unanswered ({chatMsgs.filter(m => m.status === "unanswered").length})</button>
+                <button onClick={async () => {
+                  setChatMsgTab("answered");
+                  const shopId = await getShopId();
+                  const { data } = await supabase.from("chat_messages").select("*").eq("shop_id", shopId).eq("status", "answered").order("created_at", { ascending: false });
+                  if (data) setChatMsgs(data);
+                }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${chatMsgTab === "answered" ? "bg-accent text-primary" : "text-slate-400 hover:text-white"}`}
+                >Answered</button>
+              </div>
+            </div>
+
+            {chatMsgTab === "unanswered" ? (
+              chatMsgs.filter(m => m.status === "unanswered").length > 0 ? (
+                chatMsgs.filter(m => m.status === "unanswered").map((msg) => (
+                  <div key={msg.id} className="bg-primary border border-white/10 rounded-lg p-3 mb-2">
+                    <p className="text-sm text-white">{msg.question}</p>
+                    {msg.customer_name && <p className="text-xs text-slate-400 mt-1">— {msg.customer_name}</p>}
+                    <div className="mt-2">
+                      <textarea rows={2} value={chatReplies[msg.id] || ""} onChange={(e) => setChatReplies({ ...chatReplies, [msg.id]: e.target.value })} placeholder="Type your reply..."
+                        className="w-full bg-primary border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-accent/50 resize-none"
+                      />
+                      <button onClick={() => sendChatReply(msg.id)} disabled={!chatReplies[msg.id]?.trim()}
+                        className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent2 text-primary text-xs font-bold rounded-lg transition-all disabled:opacity-50"
+                      >
+                        <FiSend size={12} /> Send Reply
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-6">No unanswered questions.</p>
+              )
+            ) : (
+              chatMsgs.filter(m => m.status === "answered").length > 0 ? (
+                chatMsgs.filter(m => m.status === "answered").map((msg) => (
+                  <div key={msg.id} className="bg-primary border border-white/10 rounded-lg p-3 mb-2">
+                    <p className="text-sm font-medium text-white">Q: {msg.question}</p>
+                    {msg.answer && (
+                      <div className="mt-1.5 bg-accent/10 border border-accent/20 rounded-lg px-3 py-2">
+                        <p className="text-[10px] font-semibold text-accent mb-0.5">Your reply:</p>
+                        <p className="text-xs text-slate-300">{msg.answer}</p>
+                      </div>
+                    )}
+                    {msg.feedback && (
+                      <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        msg.feedback === "helpful" ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"
+                      }`}>
+                        {msg.feedback === "helpful" ? "👍 Helpful" : "👎 Not helpful"}
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-6">No answered messages.</p>
+              )
+            )}
+          </div>
+        </div>
       </div>
+      )}
 
       {/* Add / Edit Form Modal */}
       {showForm && (

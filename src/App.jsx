@@ -6,7 +6,6 @@ import Hero from "./components/Hero";
 import LocationMap from "./components/LocationMap";
 import Navbar from "./components/Navbar";
 import SocialFeed from "./components/SocialFeed";
-import WhatsAppFloat from "./components/WhatsAppFloat";
 import TrustBar from "./components/TrustBar";
 import ChatWidget from "./components/ChatWidget";
 import { Route, Routes } from "react-router"
@@ -32,7 +31,6 @@ function App() {
             <SocialFeed />
             <LocationMap />
             <Footer />
-            <WhatsAppFloat />
             <ChatWidget />
             <BackToTop />
           </div>
