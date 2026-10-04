@@ -112,7 +112,6 @@ function SocialFeed() {
                 url,
                 Icon,
                 gradient,
-                solidColor,
                 buttonClass,
               },
               i,

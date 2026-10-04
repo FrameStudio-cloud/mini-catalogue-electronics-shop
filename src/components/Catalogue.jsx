@@ -142,7 +142,9 @@ function Catalogue() {
 
   // Dynamic filter options
   const types = ['All', ...new Set(items.map(i => i.type === 'product' ? 'Products' : 'Services'))]
-  const allCategories = ['All', ...new Set(items.map(i => i.category))]
+  // Categories are filtered by the current type first, so switching Type cannot
+  // leave a Category selected that no item matches. `allCategories` predated that
+  // and was never bound to the dropdown.
 
   const availableCategories = ['All', ...new Set(
     items
