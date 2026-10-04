@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaWhatsapp, FaInstagram, FaFacebook, FaTiktok } from "react-icons/fa";
 import { MdLocationOn, MdAccessTime, MdEmail, MdPhone } from "react-icons/md";
-import { supabase } from "../lib/supabase";
-import { getShopId } from "../lib/shop";
+import { fetchSettings } from "../api/keelClient";
 import shop from "../config/shop";
 
 function formatHours(hours) {
@@ -21,23 +20,25 @@ function Footer() {
   const [todayHours, setTodayHours] = useState("");
 
   useEffect(() => {
-    getShopId().then(shopId => {
-      if (!shopId) return;
-      supabase
-        .from("store_settings")
-        .select("whatsapp, business_hours")
-        .eq("shop_id", shopId)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            if (data.whatsapp) setWhatsapp(data.whatsapp);
-            if (data.business_hours && Object.keys(data.business_hours).length > 0) {
-              setHours(null);
-              setTodayHours(formatHours(data.business_hours) || "");
-            }
-          }
-        });
-    });
+    // The route returns the whole settings row rather than the two columns this
+    // footer used to select. That is deliberate on the server side: naming columns
+    // makes publishing a new one a decision instead of an accident.
+    const ctrl = new AbortController();
+    fetchSettings({ signal: ctrl.signal })
+      .then(data => {
+        if (!data) return;
+        if (data.whatsapp) setWhatsapp(data.whatsapp);
+        if (data.business_hours && Object.keys(data.business_hours).length > 0) {
+          setHours(null);
+          setTodayHours(formatHours(data.business_hours) || "");
+        }
+      })
+      .catch(() => {
+        // Keep the config/shop.js contact details and hours. Reported as the
+        // `settings` health signal, so a dead API is visible to us even though the
+        // visitor sees a complete-looking footer.
+      });
+    return () => ctrl.abort();
   }, []);
 
   const socials = [
@@ -59,7 +60,8 @@ function Footer() {
     { label: "Catalogue", href: "#catalogue" },
     { label: "About Us", href: "#about" },
     { label: "Contact", href: "#contact" },
-    { label: "Admin", href: "admin" },
+    // The Admin entry went with the admin panel. Keel is the place a shop is
+    // managed now, and a link to a route that no longer exists is worse than none.
   ];
 
   return (

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import { getShopId } from "../lib/shop";
+import { fetchBanners } from "../api/keelClient";
 import shopConfig from "../config/shop";
 
 const typeStyles = {
@@ -22,21 +21,20 @@ function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  useEffect(() => {
-    getShopId().then(shopId => {
-      if (!shopId) return;
-      supabase
-        .from("banners")
-        .select("*")
-        .eq("shop_id", shopId)
-        .eq("active", true)
-        .in("type", ["sale", "info", "alert", "hero"])
-        .order("sort_order")
-        .then(({ data }) => {
-          if (data && data.length > 0) setAnnouncements(data);
+useEffect(() => {
+      const ctrl = new AbortController();
+      fetchBanners({ signal: ctrl.signal })
+        .then(rows => {
+          if (!rows) return;
+          const items = rows.filter(b => ["sale", "info", "alert", "hero"].includes(b.type));
+          if (items.length > 0) setAnnouncements(items);
+        })
+        .catch(() => {
+          // No announcement bar. Reported as the `banners` health signal, so a dead
+          // API does not look like a shop that simply has nothing to announce.
         });
-    });
-  }, []);
+      return () => ctrl.abort();
+    }, []);
 
   useEffect(() => {
     if (announcements.length <= 1) return;

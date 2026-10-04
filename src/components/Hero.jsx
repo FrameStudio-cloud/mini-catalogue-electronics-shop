@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import { getShopId } from "../lib/shop";
+import { fetchBanners } from "../api/keelClient";
 import shopConfig from "../config/shop";
 
 const serviceImages = {
@@ -14,22 +13,25 @@ function Hero() {
   const { hero, whatsapp } = shopConfig;
   const whatsappUrl = `https://wa.me/${whatsapp}?text=Hi%20PowerSec%2C%20I%20would%20like%20a%20free%20quote.`;
 
-  useEffect(() => {
-    getShopId().then(shopId => {
-      if (!shopId) return;
-      supabase
-        .from("banners")
-        .select("*")
-        .eq("shop_id", shopId)
-        .eq("type", "hero")
-        .eq("active", true)
-        .order("sort_order")
-        .limit(1)
-        .then(({ data }) => {
-          if (data && data.length > 0) setHeroBanner(data[0]);
+useEffect(() => {
+      // keel-api already filters active and orders by sort_order, so this only has
+      // to pick the hero slice. `type` is filtered here rather than in the query
+      // because the route has no type parameter — and because the navbar and the
+      // announcement bar want the same rows.
+      const ctrl = new AbortController();
+      fetchBanners({ signal: ctrl.signal })
+        .then(rows => {
+          if (!rows) return;
+          const banner = rows.find(b => b.type === "hero");
+          if (banner) setHeroBanner(banner);
+        })
+        .catch(() => {
+          // Leave heroBanner null so the designed copy in config/shop.js stands.
+          // The failure is reported as the `banners` health signal by the client,
+          // so a dead API is not silently indistinguishable from a fresh shop.
         });
-    });
-  }, []);
+      return () => ctrl.abort();
+    }, []);
 
   const headline = heroBanner?.title || hero.headline;
   const headlineAccent = heroBanner?.subtitle || hero.headlineAccent;

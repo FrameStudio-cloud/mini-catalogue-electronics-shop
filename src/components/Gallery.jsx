@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { supabase } from '../lib/supabase'
-import { getShopId } from '../lib/shop'
+import { fetchGalleryImages } from '../api/keelClient'
 import fallbackGallery from '../config/gallery'
 
 function Gallery() {
@@ -11,28 +10,27 @@ function Gallery() {
   const [selectedImage, setSelectedImage] = useState(null)
 
   useEffect(() => {
-    async function fetchGallery() {
-      const shopId = await getShopId()
-      if (!shopId) {
-        setItems(fallbackGallery)
-        setLoading(false)
-        return
+    const ctrl = new AbortController()
+    let cancelled = false
+    ;(async () => {
+      try {
+        // null means no token configured, which is an ordinary state for a static
+        // deploy rather than a failure.
+        const rows = await fetchGalleryImages({ signal: ctrl.signal })
+        if (cancelled) return
+        setItems(rows && rows.length > 0 ? rows : fallbackGallery)
+      } catch {
+        // Show the designed fallback. Reported as the `catalogue` health signal,
+        // so a dead API is no longer indistinguishable from a small gallery.
+        if (!cancelled) setItems(fallbackGallery)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      const { data, error } = await supabase
-        .from('catalogue')
-        .select('id, name, category, image, description')
-        .eq('shop_id', shopId)
-        .not('image', 'is', null)
-        .order('created_at', { ascending: false })
-
-      if (error || !data?.length) {
-        setItems(fallbackGallery)
-      } else {
-        setItems(data.map(item => ({ ...item, title: item.name })))
-      }
-      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+      ctrl.abort()
     }
-    fetchGallery()
   }, [])
 
   const categories = ['All', ...new Set(items.map(i => i.category))]

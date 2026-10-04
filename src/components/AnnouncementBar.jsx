@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import { getShopId } from "../lib/shop";
+import { fetchBanners } from "../api/keelClient";
 
 const typeStyles = {
   sale: "bg-gradient-to-r from-red-600 to-orange-500 text-white",
@@ -13,19 +12,17 @@ export default function AnnouncementBar() {
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
-    getShopId().then(shopId => {
-      if (!shopId) return;
-      supabase
-        .from("banners")
-        .select("*")
-        .eq("shop_id", shopId)
-        .eq("active", true)
-        .in("type", ["sale", "info", "alert"])
-        .order("sort_order")
-        .then(({ data }) => {
-          if (data && data.length > 0) setBanners(data);
-        });
-    });
+    const ctrl = new AbortController();
+    fetchBanners({ signal: ctrl.signal })
+      .then(rows => {
+        if (!rows) return;
+        const items = rows.filter(b => ["sale", "info", "alert"].includes(b.type));
+        if (items.length > 0) setBanners(items);
+      })
+      .catch(() => {
+        // No bar. Reported as the `banners` health signal by the client.
+      });
+    return () => ctrl.abort();
   }, []);
 
   useEffect(() => {

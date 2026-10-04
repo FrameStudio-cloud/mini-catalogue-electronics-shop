@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { supabase } from '../lib/supabase'
-import { getShopId } from '../lib/shop'
+import { fetchCatalogue } from '../api/keelClient'
 import fallbackCatalogue from '../config/catalogue'
 import { CatalogueModal } from './CatalogueModal'
 import { CatalogueCard } from './CatalogueCard'
@@ -113,28 +112,32 @@ function Catalogue() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    async function fetchCatalogue() {
-      const shopId = await getShopId()
-      if (!shopId) {
-        setItems(fallbackCatalogue)
-        setLoading(false)
-        return
+    const ctrl = new AbortController()
+    let cancelled = false
+    ;(async () => {
+      try {
+        // null means "no token configured", which is an ordinary state for a static
+        // deploy, not a failure — so it falls through to the config copy.
+        const rows = await fetchCatalogue({ signal: ctrl.signal })
+        if (cancelled) return
+        setItems(rows && rows.length > 0 ? rows : fallbackCatalogue)
+      } catch {
+        // The API is down. Show the designed fallback, but note that this is the ONE
+        // place in the app whose failure is invisible to the visitor AND was
+        // previously invisible to us too. The `catalogue` health signal is the fix:
+        // a dead API no longer looks like a shop with a small catalogue.
+        if (!cancelled) setItems(fallbackCatalogue)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      const { data, error } = await supabase
-        .from('catalogue')
-        .select('*')
-        .eq('shop_id', shopId)
-        .eq('available', true)
-        .order('created_at', { ascending: false })
-
-      if (error || !data?.length) {
-        setItems(fallbackCatalogue)
-      } else {
-        setItems(data.map(item => ({ ...item, priceLabel: item.price_label })))
-      }
-      setLoading(false)
+    })()
+    // The cleanup has to live out here. Returning it from the async IIFE would
+    // discard it, because nothing awaits that function — so the request would
+    // never be aborted on unmount.
+    return () => {
+      cancelled = true
+      ctrl.abort()
     }
-    fetchCatalogue()
   }, [])
 
   // Dynamic filter options

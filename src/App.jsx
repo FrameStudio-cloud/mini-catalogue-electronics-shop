@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import BackToTop from "./components/BackToTop";
 import Catalogue from "./components/Catalogue";
 import Footer from "./components/Footer";
@@ -7,16 +8,21 @@ import LocationMap from "./components/LocationMap";
 import Navbar from "./components/Navbar";
 import SocialFeed from "./components/SocialFeed";
 import TrustBar from "./components/TrustBar";
-import ChatWidget from "./components/ChatWidget";
 import { Route, Routes } from "react-router"
-import AdminLogin from "./admin/AdminLogin";
-import AdminDashboard from "./admin/AdminDashboard";
-import ProtectedRoute from "./admin/ProtectedRoute";
 import { usePageTracking } from "./hooks/usePageTracking";
+import { ensureAnalytics } from "./lib/analytics";
 
-
+/**
+ * Armed here rather than inside usePageTracking so the SDK is live before any
+ * component's first fetch reports health. If the arming were left to a component
+ * that mounts later, the earliest health_ok of the visit could be dropped.
+ */
 function App() {
+  useEffect(() => {
+    ensureAnalytics();
+  }, []);
   usePageTracking();
+
   return (
     <Routes>
       <Route
@@ -31,18 +37,8 @@ function App() {
             <SocialFeed />
             <LocationMap />
             <Footer />
-            <ChatWidget />
             <BackToTop />
           </div>
-        }
-      />
-      <Route path="/admin" element={<AdminLogin />} />
-      <Route
-        path="/admin/dashboard"
-        element={
-          <ProtectedRoute>
-            <AdminDashboard />
-          </ProtectedRoute>
         }
       />
     </Routes>
